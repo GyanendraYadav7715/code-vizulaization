@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  algoviz:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    container_name: algoviz-app
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production

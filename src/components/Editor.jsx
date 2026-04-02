@@ -1,7 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import MonacoEditor from '@monaco-editor/react';
 
-export default function Editor({ code, onChange, activeLine }) {
+export default function Editor({ code, onChange, activeLine, heatmap = {} }) {
   const monacoRef = useRef(null);
   const editorRef = useRef(null);
   const decorationsCollection = useRef(null);
@@ -17,22 +17,47 @@ export default function Editor({ code, onChange, activeLine }) {
 
   useEffect(() => {
     if (editorRef.current && monacoRef.current && decorationsCollection.current) {
+      const decs = [];
+      
+      // Calculate max frequency for Heatmap gradients
+      const freqs = Object.values(heatmap);
+      const maxFreq = freqs.length > 0 ? Math.max(...freqs) : 1;
+
+      // Add heatmap decorations
+      Object.entries(heatmap).forEach(([line, count]) => {
+         const numLine = Number(line);
+         if (!numLine || numLine === activeLine) return; // Active line overwrites heatmap
+         
+         const ratio = count / maxFreq;
+         let colorClass = 'bg-yellow-500/10';
+         if (ratio > 0.3) colorClass = 'bg-orange-500/20';
+         if (ratio > 0.6) colorClass = 'bg-red-500/30';
+
+         decs.push({
+            range: new monacoRef.current.Range(numLine, 1, numLine, 1),
+            options: {
+               isWholeLine: true,
+               className: colorClass,
+               hoverMessage: { value: `**Executed \${count} times**` }
+            }
+         });
+      });
+
       if (activeLine) {
-        decorationsCollection.current.set([{
+        decs.push({
           range: new monacoRef.current.Range(activeLine, 1, activeLine, 1),
           options: {
             isWholeLine: true,
-            className: 'bg-yellow-500/20 border-l-4 border-yellow-500',
-            glyphMarginClassName: 'bg-yellow-500',
+            className: 'bg-blue-500/30 border-l-4 border-blue-400 z-50',
           }
-        }]);
+        });
         // Scroll to the line
         editorRef.current.revealLineInCenterIfOutsideViewport(activeLine);
-      } else {
-        decorationsCollection.current.set([]);
       }
+      
+      decorationsCollection.current.set(decs);
     }
-  }, [activeLine]);
+  }, [activeLine, heatmap]);
 
   return (
     <div className="w-full h-full relative">
