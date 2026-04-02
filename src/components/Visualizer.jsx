@@ -1,108 +1,131 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Visualizer({ step, prevStep }) {
   if (!step || !step.memory) {
-    return (
-      <div className="w-full h-full flex items-center justify-center text-gray-500">
-        <p>Run code to see visualizations</p>
-      </div>
-    );
+     return <div className="flex h-full items-center justify-center text-gray-500">Awaiting execution...</div>
   }
 
-  // Filter only arrays
-  const arraysToRender = Object.entries(step.memory).filter(([k, v]) => Array.isArray(v));
-
-  if (arraysToRender.length === 0) {
-    return (
-       <div className="w-full h-full flex items-center justify-center text-gray-500">
-          <p>No arrays found to visualize.</p>
-       </div>
-    )
+  // Find the primary array to visualize (just take the first one found)
+  const arrays = Object.entries(step.memory).filter(([k, v]) => Array.isArray(v));
+  if (arrays.length === 0) {
+      return <div className="flex h-full items-center justify-center text-gray-500">No array in memory to visualize.</div>
   }
+
+  const [arrName, arr] = arrays[0];
+  const prevArr = prevStep?.memory[arrName] || [];
+
+  // Find active pointer indices: i, j, left, mid, right
+  const pointerNames = ['i', 'j', 'left', 'right', 'mid', 'low', 'high', 'curr'];
+  const pointersByStrIndex = {}; // "0": ["i"], "3": ["j", "right"]
+  
+  Object.entries(step.memory).forEach(([k, v]) => {
+     if (typeof v === 'number' && pointerNames.includes(k) && v >= 0 && v < arr.length) {
+         if (!pointersByStrIndex[v]) pointersByStrIndex[v] = [];
+         pointersByStrIndex[v].push(k);
+     }
+  });
+
+  // Calculate max for relative height scaling
+  const maxVal = Math.max(...arr, 1); 
+
+  const getPointerColor = (name) => {
+     const colors = {
+        'i': 'text-blue-400',
+        'j': 'text-yellow-400',
+        'left': 'text-purple-400',
+        'right': 'text-red-400',
+        'mid': 'text-green-400'
+     };
+     return colors[name] || 'text-gray-400';
+  };
 
   return (
-    <div className="w-full h-full flex flex-col p-6 gap-8 pb-20">
-      <AnimatePresence>
-        {arraysToRender.map(([varName, currArray]) => {
-          const prevArray = prevStep?.memory?.[varName] || [];
-          
-          // Determine the maximum value for scaling logic (avoid dividing by 0)
-          const allVals = [...currArray, ...prevArray].filter(v => typeof v === 'number');
-          const maxVal = allVals.length > 0 ? Math.max(...allVals) : 10;
-          const minVal = allVals.length > 0 ? Math.min(...allVals) : 0;
-          
-          return (
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              key={varName} 
-              className="flex flex-col border border-gray-800 rounded-xl p-4 bg-gray-900/40 relative overflow-hidden"
-            >
-              <div className="text-sm font-semibold text-gray-400 mb-6 uppercase tracking-wider font-mono">
-                {varName} <span className="opacity-50 text-xs normal-case ml-2">length: {currArray.length}</span>
-              </div>
-              
-              <div className="flex items-end gap-2 h-44 overflow-x-auto min-w-min pb-2 custom-scrollbar">
-                <AnimatePresence>
-                  {currArray.map((val, idx) => {
-                     const isNumber = typeof val === 'number';
-                     const displayHeight = isNumber 
-                        ? Math.max(10, ((val - Math.min(0, minVal)) / (maxVal - Math.min(0, minVal) || 1)) * 140) 
-                        : 40;
-                     
-                     // Highlight changed indices
-                     const isChanged = prevStep && prevArray && prevArray[idx] !== val && prevArray.length > 0;
-                     const isNew = prevStep && prevArray && idx >= prevArray.length;
+    <div className="flex flex-col h-full w-full items-center justify-center relative p-8">
+      {/* Title */}
+      <h2 className="absolute top-4 left-4 text-gray-400 font-mono text-sm tracking-widest uppercase font-bold">
+        {arrName} = [...]
+      </h2>
 
-                     // Determine color
-                     let bgColor = "bg-blue-500";
-                     let labelColor = "text-blue-100";
-                     if (isChanged) {
-                        bgColor = "bg-green-500";
-                        labelColor = "text-green-50";
-                     } else if (isNew) {
-                        bgColor = "bg-yellow-500";
-                        labelColor = "text-yellow-900";
-                     }
-
-                     return (
-                        <motion.div
-                          layout
-                          key={isNumber ? `${val}-${idx}` : idx} // naive key to animate swaps if values are unique
-                          initial={{ opacity: 0, scale: 0.8 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          exit={{ opacity: 0, scale: 0.5 }}
-                          transition={{
-                             type: "spring",
-                             stiffness: 300,
-                             damping: 24,
-                          }}
-                          className="flex flex-col items-center justify-end group min-w-[2.5rem]"
+      <div className="flex items-end justify-center gap-2 flex-1 w-full mt-10">
+        <AnimatePresence mode="popLayout">
+          {arr.map((val, idx) => {
+             const prevVal = prevArr[idx];
+             const isChanged = prevVal !== undefined && val !== prevVal;
+             
+             return (
+               <div key={idx} className="flex flex-col items-center gap-2">
+                 <motion.div
+                   layout
+                   initial={{ opacity: 0, scaleY: 0 }}
+                   animate={{ 
+                      opacity: 1, 
+                      scaleY: 1,
+                      backgroundColor: isChanged ? '#22c55e' : '#3b82f6', // Green if changed, else blue
+                   }}
+                   exit={{ opacity: 0, scaleY: 0 }}
+                   transition={{ 
+                      type: "spring", 
+                      stiffness: 300, 
+                      damping: 20,
+                      backgroundColor: { duration: 0.2 } 
+                   }}
+                   className={`w-10 sm:w-12 md:w-14 rounded-t-md relative flex justify-center \${!isChanged && prevArr.length > 0 ? 'opacity-80' : 'opacity-100 z-10'}`}
+                   style={{ 
+                     height: `\${Math.max((val / maxVal) * 250, 20)}px`,
+                     transformOrigin: "bottom"
+                   }}
+                 >
+                   {/* Float Label for Change */}
+                   <AnimatePresence>
+                     {isChanged && (
+                        <motion.div 
+                           initial={{ opacity: 0, y: 10 }}
+                           animate={{ opacity: 1, y: -25 }}
+                           exit={{ opacity: 0 }}
+                           className="absolute -top-4 text-[10px] font-bold text-green-400 whitespace-nowrap bg-green-900/40 px-1.5 rounded"
                         >
-                           <div className="text-xs text-gray-500 mb-2 truncate max-w-[3rem] opacity-0 group-hover:opacity-100 transition-opacity">
-                              [{idx}]
-                           </div>
-                           <motion.div 
-                              className={`w-10 rounded-t border-b-2 border-black/20 flex items-center justify-center shadow-lg transition-colors ${bgColor}`}
-                              style={{ height: `${displayHeight}px` }}
-                           >
-                              <span className={`font-mono text-sm font-bold ${labelColor}`}>
-                                 {typeof val === 'object' ? '{..}' : String(val)}
-                              </span>
-                           </motion.div>
+                           changed!
                         </motion.div>
-                     );
-                  })}
-                </AnimatePresence>
-                {currArray.length === 0 && (
-                   <div className="text-gray-600 text-sm italic py-4">Empty</div>
-                )}
-              </div>
-            </motion.div>
-          );
-        })}
-      </AnimatePresence>
+                     )}
+                   </AnimatePresence>
+                   
+                   <span className="mt-auto mb-2 text-white font-mono text-sm font-bold">
+                     {val}
+                   </span>
+                 </motion.div>
+
+                 {/* Index Number */}
+                 <div className="text-gray-500 font-mono text-xs mb-1 bg-black/40 px-1 rounded">
+                   [{idx}]
+                 </div>
+
+                 {/* Pointers Below Array Box */}
+                 <div className="flex flex-col items-center gap-0.5 justify-start h-16 relative">
+                    <AnimatePresence>
+                       {(pointersByStrIndex[idx] || []).map((ptr, pIdx) => (
+                          <motion.div
+                             key={ptr}
+                             layoutId={`ptr-\${ptr}`} // Enables smooth move between indices!
+                             initial={{ opacity: 0, y: 10 }}
+                             animate={{ opacity: 1, y: pIdx * 2 }}
+                             exit={{ opacity: 0, scale: 0 }}
+                             className={`flex flex-col items-center \${getPointerColor(ptr)} drop-shadow-md absolute`}
+                             style={{ top: pIdx * 18 }}
+                          >
+                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="m18 15-6-6-6 6"/>
+                             </svg>
+                             <span className="text-[10px] uppercase font-bold mt-[-2px]">{ptr}</span>
+                          </motion.div>
+                       ))}
+                    </AnimatePresence>
+                 </div>
+               </div>
+             );
+          })}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
